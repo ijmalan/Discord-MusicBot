@@ -20,7 +20,7 @@
   ],
   "env": {
     "token": {
-      "description": "MTI2Nzg5NDMzMjg0MTUyNTI4OQ.Gzn23e.vZ0fUp3PNStiRdefajtA9aIN1YyiEIopjuWavc",
+      "description": "",
       "required": "true"
     },
     "clientId": {
