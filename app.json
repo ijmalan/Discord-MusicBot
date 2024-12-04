@@ -20,15 +20,15 @@
   ],
   "env": {
     "token": {
-      "description": "The Discord Bot Token (https://discord.com/developers/applications)",
+      "description": "MTI2Nzg5NDMzMjg0MTUyNTI4OQ.Gzn23e.vZ0fUp3PNStiRdefajtA9aIN1YyiEIopjuWavc",
       "required": "true"
     },
     "clientId": {
-      "description": "The Discord Bot ClientID",
+      "description": "1267894332841525289",
       "required": "true"
     },
     "clientSecret": {
-      "description": "The Discord Bot ClientSecret",
+      "description": "EldCRBxJFxwzPeqDrltFg7kvGMGgB7M8",
       "required": "true"
     },
     "website": {
