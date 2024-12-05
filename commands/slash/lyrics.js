@@ -1,12 +1,12 @@
 const SlashCommand = require("../../lib/SlashCommand");
 const {
-	MessageActionRow,
-	MessageSelectMenu,
-	MessageButton,
-	MessageEmbed
+	ActionRowBuilder,
+	StringSelectMenuBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	EmbedBuilder,
 } = require("discord.js");
-const { Rlyrics } = require("rlyrics");
-const lyricsApi = new Rlyrics();
+const { findLyrics } = require("llyrics");
 
 const command = new SlashCommand()
 	.setName("lyrics")
@@ -15,25 +15,25 @@ const command = new SlashCommand()
 		option
 			.setName("song")
 			.setDescription("The song to get lyrics for")
-			.setRequired(false),
+			.setRequired(false)
 	)
 	.setRun(async (client, interaction, options) => {
 		await interaction.reply({
 			embeds: [
-				new MessageEmbed()
+				new EmbedBuilder()
 					.setColor(client.config.embedColor)
 					.setDescription("🔎 | **Searching...**"),
 			],
 		});
 
 		let player;
-		if (client.manager) {
-			player = client.manager.players.get(interaction.guild.id);
+		if (client.manager.Engine) {
+			player = client.manager.Engine.players.get(interaction.guild.id);
 		} else {
 			return interaction.editReply({
 				embeds: [
-					new MessageEmbed()
-						.setColor("RED")
+					new EmbedBuilder()
+						.setColor("Red")
 						.setDescription("Lavalink node is not connected"),
 				],
 			});
@@ -43,8 +43,8 @@ const command = new SlashCommand()
 		if (!args && !player) {
 			return interaction.editReply({
 				embeds: [
-					new MessageEmbed()
-						.setColor("RED")
+					new EmbedBuilder()
+						.setColor("Red")
 						.setDescription("There's nothing playing"),
 				],
 			});
@@ -52,182 +52,217 @@ const command = new SlashCommand()
 
 		let currentTitle = ``;
 		const phrasesToRemove = [
-			"Full Video", "Full Audio", "Official Music Video", "Lyrics", "Lyrical Video",
-			"Feat.", "Ft.", "Official", "Audio", "Video", "HD", "4K", "Remix", "Lyric Video", "Lyrics Video", "8K", 
-			"High Quality", "Animation Video", "\\(Official Video\\. .*\\)", "\\(Music Video\\. .*\\)", "\\[NCS Release\\]",
-			"Extended", "DJ Edit", "with Lyrics", "Lyrics", "Karaoke",
-			"Instrumental", "Live", "Acoustic", "Cover", "\\(feat\\. .*\\)"
+			"Full Video",
+			"Full Audio",
+			"Official Music Video",
+			"Lyrics",
+			"Lyrical Video",
+			"Feat.",
+			"Ft.",
+			"Official",
+			"Audio",
+			"Video",
+			"HD",
+			"4K",
+			"Remix",
+			"Lyric Video",
+			"Lyrics Video",
+			"8K",
+			"High Quality",
+			"Animation Video",
+			"\\(Official Video\\. .*\\)",
+			"\\(Music Video\\. .*\\)",
+			"\\[NCS Release\\]",
+			"Extended",
+			"DJ Edit",
+			"with Lyrics",
+			"Lyrics",
+			"Karaoke",
+			"Instrumental",
+			"Live",
+			"Acoustic",
+			"Cover",
+			"\\(feat\\. .*\\)",
 		];
 		if (!args) {
 			currentTitle = player.queue.current.title;
 			currentTitle = currentTitle
-				.replace(new RegExp(phrasesToRemove.join('|'), 'gi'), '')
-				.replace(/\s*([\[\(].*?[\]\)])?\s*(\|.*)?\s*(\*.*)?$/, '');
+				.replace(new RegExp(phrasesToRemove.join("|"), "gi"), "")
+				.replace(/\s*([\[\(].*?[\]\)])?\s*(\|.*)?\s*(\*.*)?$/, "");
 		}
 		let query = args ? args : currentTitle;
-		let lyricsResults = [];
-
-		lyricsApi.search(query).then(async (lyricsData) => {
-			if (lyricsData.length !== 0) {
-				for (let i = 0; i < client.config.lyricsMaxResults; i++) {
-					if (lyricsData[i]) {
-						lyricsResults.push({
-							label: `${lyricsData[i].title}`,
-							description: `${lyricsData[i].artist}`,
-							value: i.toString()
-						});
-					} else { break }
-				}
-
-				const menu = new MessageActionRow().addComponents(
-					new MessageSelectMenu()
-						.setCustomId("choose-lyrics")
-						.setPlaceholder("Choose a song")
-						.addOptions(lyricsResults),
-				);
-
-				let selectedLyrics = await interaction.editReply({
-					embeds: [
-						new MessageEmbed()
-							.setColor(client.config.embedColor)
-							.setDescription(
-								`Here are some of the results I found for \`${query}\`. Please choose a song to display lyrics within \`30 seconds\`.`
-							),
-					], components: [menu],
-				});
-
-				const filter = (button) => button.user.id === interaction.user.id;
-
-				const collector = selectedLyrics.createMessageComponentCollector({
-					filter,
-					time: 30000,
-				});
-
-				collector.on("collect", async (interaction) => {
-					if (interaction.isSelectMenu()) {
-						await interaction.deferUpdate();
-						const url = lyricsData[parseInt(interaction.values[0])].url;
-
-						lyricsApi.find(url).then((lyrics) => {
-							let lyricsText = lyrics.lyrics;
-
-							const button = new MessageActionRow()
-								.addComponents(
-									new MessageButton()
-										.setCustomId('tipsbutton')
-										.setLabel('Tips')
-										.setEmoji(`📌`)
-										.setStyle('SECONDARY'),
-									new MessageButton()
-										.setLabel('Source')
-										.setURL(url)
-										.setStyle('LINK'),
-								);
-
-							const musixmatch_icon = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Musixmatch_logo_icon_only.svg/480px-Musixmatch_logo_icon_only.svg.png';
-							let lyricsEmbed = new MessageEmbed()
-								.setColor(client.config.embedColor)
-								.setTitle(`${lyrics.name}`)
-								.setURL(url)
-								.setThumbnail(lyrics.icon)
-								.setFooter({
-									text: 'Lyrics provided by MusixMatch.',
-									iconURL: musixmatch_icon
-								})
-								.setDescription(lyricsText);
-
-							if (lyricsText.length === 0) {
-								lyricsEmbed
-									.setDescription(`**Unfortunately we're not authorized to show these lyrics.**`)
-									.setFooter({
-										text: 'Lyrics is restricted by MusixMatch.',
-										iconURL: musixmatch_icon
-									})
-							}
-
-							if (lyricsText.length > 4096) {
-								lyricsText = lyricsText.substring(0, 4050) + "\n\n[...]";
-								lyricsEmbed
-									.setDescription(lyricsText + `\nTruncated, the lyrics were too long.`)
-							}
-
-							return interaction.editReply({
-								embeds: [lyricsEmbed],
-								components: [button],
-							});
-
-						})
-					}
-				});
-
-				collector.on("end", async (i) => {
-					if (i.size == 0) {
-						selectedLyrics.edit({
-							content: null,
-							embeds: [
-								new MessageEmbed()
-									.setDescription(
-										`No song is selected. You took too long to select a track.`
-									)
-									.setColor(client.config.embedColor),
-							], components: [],
-						});
-					}
-				});
-
-			} else {
-				const button = new MessageActionRow()
-					.addComponents(
-						new MessageButton()
-							.setEmoji(`📌`)
-							.setCustomId('tipsbutton')
-							.setLabel('Tips')
-							.setStyle('SECONDARY'),
-					);
-				return interaction.editReply({
-					embeds: [
-						new MessageEmbed()
-							.setColor("RED")
-							.setDescription(
-								`No results found for \`${query}\`!\nMake sure you typed in your search correctly.`,
-							),
-					], components: [button],
-				});
-			}
-		}).catch((err) => {
-			console.error(err);
+		let lyricsData;
+		try {
+			lyricsData = await findLyrics({
+				search_engine: { musixmatch: true, youtube: true, genius: false },
+				song_title: query,
+			});
+		} catch {
 			return interaction.editReply({
 				embeds: [
-					new MessageEmbed()
-						.setColor("RED")
+					new EmbedBuilder()
+						.setColor("Red")
+						.setTitle("No lyrics found")
 						.setDescription(
-							`An unknown error has occured, please check your console.`,
+							`Here is some tips to get your song lyrics correctly \n
+1. Try to add the artist's name in front of the song name.
+2. Try to search the lyrics manually by providing the song query using your keyboard.
+3. Avoid searching lyrics in languages other than English.`
 						),
 				],
 			});
+		}
+
+		function splitText(text, maxChunkLength) {
+			const chunks = [];
+			for (let i = 0; i < text.length; i += maxChunkLength) {
+				chunks.push(text.slice(i, i + maxChunkLength));
+			}
+			return chunks;
+		}
+
+		const lyrics = lyricsData.lyrics;
+		const trackName = lyricsData.trackName;
+		const trackArtist = lyricsData.trackArtist;
+		const artworkUrl = lyricsData.artworkUrl;
+		const searchEngine = lyricsData.searchEngine;
+		const pageLength = 2000;
+		const pages = splitText(lyrics, pageLength);
+
+		let currentPage = 0;
+
+		const embed = new EmbedBuilder()
+			.setColor(client.config.embedColor)
+			.setTitle(`${trackName} - ${trackArtist}`)
+			.setThumbnail(artworkUrl)
+			.setDescription(pages[currentPage])
+			.setFooter({ text: `Page: ${currentPage + 1}/${pages.length} | Search Engine: ${searchEngine}` });
+
+		const but1 = new ButtonBuilder()
+			.setCustomId("prev_interaction")
+			.setEmoji("◀️")
+			.setStyle(ButtonStyle.Primary)
+			.setDisabled(currentPage === 0);
+
+		const but2 = new ButtonBuilder()
+			.setCustomId("next_interaction")
+			.setEmoji("▶️")
+			.setStyle(ButtonStyle.Primary)
+			.setDisabled(currentPage === pages.length - 1);
+
+		const but3 = new ButtonBuilder()
+			.setEmoji({ id: "948552310504701982" })
+			.setCustomId("delete_interaction")
+			.setStyle(ButtonStyle.Danger);
+
+		const row = new ActionRowBuilder().addComponents(but1, but2, but3);
+
+		const msg = await interaction.editReply({
+			embeds: [embed],
+			components: [row],
 		});
 
-		const collector = interaction.channel.createMessageComponentCollector({
-			time: 1000 * 3600
-		});
-
-		collector.on('collect', async interaction => {
-			if (interaction.customId === 'tipsbutton') {
-				await interaction.deferUpdate();
-				await interaction.followUp({
+		const filter = async (button) => {
+			if (button.user.id === interaction.user.id) return true;
+			else {
+				return button.reply({
+					ephemeral: true,
 					embeds: [
-						new MessageEmbed()
-							.setTitle(`Lyrics Tips`)
+						new EmbedBuilder()
 							.setColor(client.config.embedColor)
 							.setDescription(
-								`Here is some tips to get your song lyrics correctly \n\n\
-                                1. Try to add the artist's name in front of the song name.\n\
-                                2. Try to search the lyrics manually by providing the song query using your keyboard.\n\
-                                3. Avoid searching lyrics in languages other than English.`,
+								`${client.e.crossMark} | This interaction button is only for <@${interaction.user.id}>.`
 							),
-					], ephemeral: true, components: []
+					],
 				});
-			};
+			}
+		};
+
+		const collector = msg.createMessageComponentCollector({ filter });
+
+		collector.on("collect", async (i) => {
+			if (i.customId === "delete_interaction") {
+				await i.deferUpdate();
+				i.deleteReply().catch((err) => {
+					return;
+				});
+				msg.delete().catch((err) => {
+					return;
+				});
+			}
+			if (i.customId === "next_interaction") {
+				currentPage++;
+				if (currentPage < pages.length) {
+					const newEmbed = new EmbedBuilder()
+						.setColor(client.config.embedColor)
+						.setTitle(`${trackName} - ${trackArtist}`)
+						.setDescription(pages[currentPage])
+						.setFooter({
+							text: `Page: ${currentPage + 1}/${
+								pages.length
+							}`,
+						});
+
+					const newBut1 = new ButtonBuilder()
+						.setCustomId("prev_interaction")
+						.setEmoji("◀️")
+						.setStyle(ButtonStyle.Primary)
+						.setDisabled(currentPage === 0);
+
+					const newBut2 = new ButtonBuilder()
+						.setCustomId("next_interaction")
+						.setEmoji("▶️")
+						.setStyle(ButtonStyle.Primary)
+						.setDisabled(currentPage === pages.length - 1);
+
+					const newRow = new ActionRowBuilder().addComponents(
+						newBut1,
+						newBut2,
+						but3
+					);
+
+					await i.update({
+						embeds: [newEmbed],
+						components: [newRow],
+					});
+				}
+			} else if (i.customId === "prev_interaction") {
+				currentPage--;
+				if (currentPage >= 0) {
+					const newEmbed = new EmbedBuilder()
+						.setColor(client.config.embedColor)
+						.setTitle(`${trackName} - ${trackArtist}`)
+						.setDescription(pages[currentPage])
+						.setFooter({
+							text: `Page: ${currentPage + 1}/${
+								pages.length
+							}`,
+						});
+
+					const newBut1 = new ButtonBuilder()
+						.setCustomId("prev_interaction")
+						.setEmoji("◀️")
+						.setStyle(ButtonStyle.Primary)
+						.setDisabled(currentPage === 0);
+
+					const newBut2 = new ButtonBuilder()
+						.setCustomId("next_interaction")
+						.setEmoji("▶️")
+						.setStyle(ButtonStyle.Primary)
+						.setDisabled(currentPage === pages.length - 1);
+
+					const newRow = new ActionRowBuilder().addComponents(
+						newBut1,
+						newBut2,
+						but3
+					);
+
+					await i.update({
+						embeds: [newEmbed],
+						components: [newRow],
+					});
+				}
+			}
 		});
 	});
 
